@@ -1,11 +1,17 @@
+import * as dotenv from 'dotenv'
+dotenv.config()
 import http from 'http';
+import morgan from 'morgan';
 import express, {Express} from 'express';
-import routes from './routes/collections';
+import accountRoutes from './routes/accounts';
+import collectionRoutes from './routes/collections';
 
 const router: Express = express();
 
 // Setup logging
+router.use(morgan('dev'));
 
+// cors
 router.use((req, res, next) => {
     res.header('Access-COntrol-Allow-Origin', '*');
     res.header('Access-Control-Allow-Headers', 'origin, X-Requested-With,Content-Type,Accept, Authorization');
@@ -17,7 +23,9 @@ router.use((req, res, next) => {
     next();
 });
 
-router.use('/', routes);
+// routes
+router.use('/', collectionRoutes);
+router.use('/', accountRoutes);
 
 router.use((req, res, next) => {
     const error = new Error('Route Not Found');
