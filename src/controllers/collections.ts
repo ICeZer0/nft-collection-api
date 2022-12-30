@@ -1,52 +1,73 @@
 import axios, { AxiosResponse } from 'axios';
 import { Request, Response, NextFunction } from 'express';
+import { Network, Alchemy } from "alchemy-sdk";
+
+const apiKey = process.env.ALCHEMY_KEY;
+const settings = {
+    apiKey: apiKey,
+    network: Network.ETH_MAINNET,
+    url: `https://eth-mainnet.g.alchemy.com/v2/${apiKey}`
+};
 
 interface Collection {
     "ethWalletId": string;
     "name": string;
+    "address": string;
     "assetsHeld": number;
-    "supply": number;
-    "image": string;
+    "totalSupply": number;
+    "imageUrl": string;
     "openseaFloorPrice": number;
 }
 
-// testing routes 
-const sampleResp = [
-    {
-        "ethWalletId": "0001001",
-        "name": "myCollectionName",
-        "assetsHeld": 25,
-        "supply": 1000,
-        "image": "https://imageURL.com",
-        "openseaFloorPrice": 10.00
-    },
-    {
-        "ethWalletId": "0001001",
-        "name": "myCollectionName",
-        "assetsHeld": 25,
-        "supply": 1000,
-        "image": "https://imageURL.com",
-        "openseaFloorPrice": 10.00
-    },
-]
-
 // fetch all collections for a ether wallet
-const getCollections = async (request: Request, response: Response, next: NextFunction) => {
-    // let ethWalletId = request.params.ethWalletId
-    // let resp: AxiosResponse = await axios.get('myURL/${ethWalletId}');
-    const collections: Collection[] = sampleResp;
-    return response.status(200).json({
-        data: collections
-    })
+const getMetaDataForCollections = async (request: Request, response: Response, next: NextFunction) => {
+    const alchemy = new Alchemy(settings);
+
+    try {
+        const collectionGroup: Collection[] = [];
+
+        const walletAddr = request.params.walletAddress
+        const collectionQueryAddress = request.query.collectionAddress
+
+        const acccountMeta = await alchemy.nft.getNftsForOwner(walletAddr)
+
+        acccountMeta?.ownedNfts.map((data: any, idx: number) => {
+
+            const nftCollectionData = {
+                "ethWalletId": request.params.walletAddress,
+                "name": data.contract.name,
+                "address": data.contract.address,
+                "assetsHeld": data.balance,
+                "totalSupply": data.contract.totalSupply,
+                "imageUrl": data.media[0].thumbnail,
+                "openseaFloorPrice": data.contract.openSea.floorPrice
+            }
+
+            collectionGroup.push(nftCollectionData);
+        })
+
+        // filter results based on contract Address query param
+        if (collectionQueryAddress) {
+            const filteredObjects = collectionGroup.filter(obj => obj.address !== collectionQueryAddress);
+
+            return response.status(200).json({
+                data: filteredObjects
+            });
+        }
+
+        return response.status(200).json({
+            data: collectionGroup
+        });
+
+    } catch (error) {
+        console.error(error);
+        return response.status(400).json({
+            data: null,
+            error
+        });
+
+    }
 }
 
-// const getCollectionById = async (request: Request, response: Response, next: NextFunction) => {
-//     // let collectionId = request.params.collectionId
-//     // let resp: AxiosResponse = await axios.get('myURL/${collectionId}');
-//     let collections: Collection[] = sampleResp;
-//     return response.status(200).json({
-//         data: collections
-//     })
-// }
 
-export default { getCollections };
+export default { getMetaDataForCollections };
