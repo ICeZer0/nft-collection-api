@@ -28,7 +28,7 @@ interface Collection {
 }
 
 // fetch all collections for a ether wallet
-const getMetaDataForCollections = async (request: Request, response: Response) => {
+const getCollectionsMetaData = async (request: Request, response: Response) => {
   const alchemy = new Alchemy(settings);
 
   try {
@@ -37,9 +37,9 @@ const getMetaDataForCollections = async (request: Request, response: Response) =
     const walletAddr = request.params.walletAddress;
     const collectionQueryAddress = <string>request.query.collectionAddress;
 
-    const acccountMeta = await alchemy.nft.getNftsForOwner(walletAddr);
+    const accountMeta = await alchemy.nft.getNftsForOwner(walletAddr);
 
-    acccountMeta?.ownedNfts.map((data: any) => {
+    const promises = accountMeta?.ownedNfts.map(async (data: any) => {
       const nftCollectionData = {
         ethWalletId: request.params.walletAddress,
         name: data.contract.name,
@@ -51,37 +51,35 @@ const getMetaDataForCollections = async (request: Request, response: Response) =
         openSeaDetails: {}
       };
 
-      collectionGroup.push(nftCollectionData);
+      try {
+        const openSeaDeails = await getOpenSeaDetails(data.contract.address, nftCollectionData);
+        collectionGroup.push(openSeaDeails as Collection);
+      } catch (err) {
+        // Handle specific errors that might occur when calling getOpenSeaDetails
+        console.log(err);
+      }
     });
 
-    // filter results based on contract Address query param
-    // assumption: collectionAddress is required for openSea API call
-    if (collectionQueryAddress) {
-      const filteredObjects: object[] = [];
-      const addressList = collectionQueryAddress.split(',');
+    Promise.all(promises).then(() => {
+      const filteredCollection: Collection[] = [];
 
-      const promises = addressList.map(async (addr) => {
-        // assume a single address per collection
-        try {
-          const data = await getFilteredValues(addr, collectionGroup);
-          filteredObjects.push(data as object);
-        } catch (err) {
-          console.log(err);
-        }
-      });
-
-      Promise.all(promises).then(() => {
-        return response.status(200).json({
-          data: filteredObjects
+      if (collectionQueryAddress) {
+        const addressList = collectionQueryAddress.split(',');
+        addressList.forEach((addr) => {
+          const res = collectionGroup.filter((obj) => obj.address === addr)[0];
+          filteredCollection.push(res as Collection);
         });
-      });
-    } else {
+      }
+      const resp = filteredCollection.length > 0 ? filteredCollection : collectionGroup;
+
       return response.status(200).json({
-        data: collectionGroup
+        data: resp
       });
-    }
+    });
   } catch (error) {
+    // Handle specific errors that might occur when calling getNftsForOwner
     console.error(error);
+
     return response.status(400).json({
       data: null,
       error
@@ -93,14 +91,12 @@ const getMetaDataForCollections = async (request: Request, response: Response) =
 This function filters down to the collectionAddresses before calling external APIs to supplement data
 Asumption: mocking opensea api calls. Additional error handling may be required depending on api responses
 */
-const getFilteredValues = async (addr: string, collections: Collection[]) => {
-  const filteredValue = collections.filter((obj) => obj.address === addr)[0];
-
+const getOpenSeaDetails = async (addr: string, collection: Collection) => {
   try {
     const data = await getOpenSeaContractData(addr);
     const openSeaResp = await getOpenSeaCollectionData(data?.collection.slug as string);
 
-    filteredValue['openSeaDetails'] = {
+    collection['openSeaDetails'] = {
       slug: data?.collection.slug as string,
       floorPrice: openSeaResp?.collection.stats.floor_price,
       totalVolume: openSeaResp?.collection.stats.total_volume,
@@ -108,7 +104,7 @@ const getFilteredValues = async (addr: string, collections: Collection[]) => {
       // transaction volume
     };
 
-    return filteredValue;
+    return collection;
   } catch (err) {
     console.error(err);
   }
@@ -146,4 +142,4 @@ const getOpenSeaCollectionData = async (collectionSlug: string) => {
   }
 };
 
-export default { getMetaDataForCollections };
+export { getCollectionsMetaData };
