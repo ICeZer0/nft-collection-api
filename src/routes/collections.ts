@@ -2,9 +2,6 @@ import express from 'express';
 import controller from '../controllers/collections';
 const router = express.Router();
 
-router.get('/collections', controller.getCollections);
-// router.get('/collections/:ethWalletId', controller.getCollections);
-// router.get('/collection/:collectionId', controller.getCollections);
+router.get('/collections/metadata/:walletAddress/', controller.getMetaDataForCollections);
 
-
-export = router;
+export default router;
